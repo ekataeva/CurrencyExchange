@@ -129,9 +129,12 @@ class DbModel:
             data = self.get_data('exchange_rate', base_currency, target_currency)
             if not data:
 
-                self.post_data()
-            self.cur.execute('UPDATE currencies (code, fullname, sign) VALUES (?, ?, ?)',
-                             (code, fullname, sign))
+                self.post_data('exchange_rate',base_currency, target_currency, rate)
+            else:
+                self.cur.execute("""UPDATE exchange_rates SET rate = ?
+                                WHERE (base_currency_id  = (SELECT id from currencies WHERE code = ?) 
+                                      and target_currency_id = (SELECT id from currencies WHERE code = ?))""",
+                                (rate, base_currency, target_currency))
 
             return self.get_data('exchange_rate', base_currency, target_currency), None
         except sqlite3.IntegrityError as e:
