@@ -1,6 +1,8 @@
 import json
 import sqlite3
 
+from setuptools import logging
+
 
 class DbModel:
     def __init__(self):
@@ -60,7 +62,6 @@ class DbModel:
                 self.cur.execute(self.get_querries[table_query], (param1,))
             else:
                 self.cur.execute(self.get_querries[table_query])
-                print("Query done")
         except Exception as e:
             error = e
             print("Ошибка при получении данных:", str(e))
@@ -93,7 +94,7 @@ class DbModel:
             try:
                 self.cur.execute('INSERT INTO currencies (code, fullname, sign) VALUES (?, ?, ?)',
                                  (code, fullname, sign))
-
+                self.con.commit()
                 return self.get_data('currency', code), None
             except sqlite3.IntegrityError as e:
                 return self.get_data('currency', code)[0], 'A currency with this code already exists'
@@ -116,6 +117,7 @@ class DbModel:
                         (SELECT id from currencies WHERE code = ?), 
                         ?)""",
                     (base_currency_code, target_currency_code, rate))
+                    self.con.commit()
                     return self.get_data('exchange_rate', base_currency_code, target_currency_code), None
             except Exception as e:
                 print("Произошла другая ошибка:", str(e))
@@ -128,18 +130,14 @@ class DbModel:
         try:
             data = self.get_data('exchange_rate', base_currency, target_currency)
             if not data:
-
-                self.post_data('exchange_rate',base_currency, target_currency, rate)
+                return None, "The currency pair is missing in the database"
             else:
                 self.cur.execute("""UPDATE exchange_rates SET rate = ?
                                 WHERE (base_currency_id  = (SELECT id from currencies WHERE code = ?) 
                                       and target_currency_id = (SELECT id from currencies WHERE code = ?))""",
                                 (rate, base_currency, target_currency))
-
+                self.con.commit()
             return self.get_data('exchange_rate', base_currency, target_currency), None
-        except sqlite3.IntegrityError as e:
-            print("Ошибка при вставке данных:", str(e))
-            return None, 'A currency with this code already exists'
         except Exception as e:
             print("Произошла другая ошибка:", str(e))
             return None, 'Server error'

@@ -102,23 +102,26 @@ class RequestHandler(BaseHTTPRequestHandler):
     def do_PATCH(self):
         if self.path.startswith('/exchangeRate/'):
             query = str(self.path.split('/')[-1])
+            currencies = query.split('?')[0]
             base_currency = query[0:3]
             target_currency = query[3:6]
             rate = query.split('=')[-1]
 
-            if not base_currency \
+            if (len(query) < 7 or len(currencies) < 6 or
+                    not base_currency \
                     or not target_currency\
-                    or not rate:
-                http_code, message, data = 400, "Bad Request", "The currency code is missing in the address"
+                    or not rate):
+                http_code, message, data = 400, "Bad Request", "The currency code or rate are missing in the address"
 
             else:
                 data, error = self.model.patch_rate(base_currency, target_currency, rate)
-                if error:
-                    http_code, message, data = 500, 'Internal Server Error', error
+                if error == "The currency pair is missing in the database":
+                    http_code, message, data = 404, "Not Found", error
                 elif data:
                     http_code, message, data = 200, "OK", data[0]
                 else:
-                    http_code, message, data = 404, "Not Found", "Currency not found"
+                    http_code, message, data = 500, 'Internal Server Error', error
+
 
             self.do_response(http_code, message, data)
 
