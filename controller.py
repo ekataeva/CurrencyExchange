@@ -8,34 +8,35 @@ class RequestHandler(BaseHTTPRequestHandler):
     model = DbModel()
 
     def do_GET(self):
-        http_code, message, data = None, None, None
+        http_code, message = None, None
 
         if self.path == '/currencies':
             data, error = self.model.get_data('currencies')
             if data:
-                http_code, message, data = 200, "OK", data
+                http_code, message = 200, data
             else:
-                http_code, message, data = 500, 'Internal Server Error', error
+                http_code, message = 500, {'message': error}
 
         elif self.path.startswith('/currency/'):
+            print(self.path)
             cur_code = str(self.path.split('/')[-1])
             if not cur_code:
-                http_code, message, data = 400, "Bad Request", "The currency code is missing in the address"
+                http_code, message = 400, {'message': "The currency code is missing in the address"}
             else:
                 data, error = self.model.get_data('currency', cur_code)
                 if error:
-                    http_code, message, data = 500, 'Internal Server Error', error
+                    http_code, message = 500, {'message': error}
                 elif data:
-                    http_code, message, data = 200, "OK", data[0]
+                    http_code, message = 200, data[0]
                 else:
-                    http_code, message, data = 404, "Not Found", "Currency not found"
+                    http_code, message = 404, {'message': "Currency not found"}
 
         elif self.path == '/exchangeRates':
             data, error = self.model.get_data('exchange_rates')
             if data:
-                http_code, message = 200, "OK"
+                http_code = 200
             else:
-                http_code, message, data = 500, 'Internal Server Error', error
+                http_code, message = 500, {'message': error}
 
 
         elif self.path.startswith('/exchangeRate/'):
@@ -43,30 +44,59 @@ class RequestHandler(BaseHTTPRequestHandler):
             base_currency = currencies[0:3]
             target_currency = currencies[3:]
             if not (base_currency and target_currency):
-                http_code, message, data = 400, "Bad Request", "Currency codes pair are missing in the address"
+                http_code, message = 400, {'message': "Currency codes pair are missing in the address"}
             else:
                 data, error = self.model.get_data('exchange_rate', base_currency, target_currency)
                 if data:
-                    http_code, message, data = 200, "OK", data[0]
+                    http_code, message = 200, data[0]
                 elif error:
-                    http_code, message, data = 500, 'Internal Server Error', error
+                    http_code, message = 500, {'message': error}
                 else:
-                    http_code, message, data = 404, "Not Found", "The exchange rate for the pair was not found"
+                    http_code, message = 404, {'message': "The exchange rate for the pair was not found"}
 
-        self.do_response(http_code, message, data)
+        elif self.path.startswith('/exchange'):
+            query = self.get_query()
+            if not (query.get('from') and query.get('to') and query.get('amount')):
+                http_code, message = 400, {'message': "Currency codes pair or amount are missing in the address"}
+            else:
+                base_currency = query['from'][0]
+                target_currency = query['to'][0]
+                amount = float(query['amount'][0])
+                data, error = self.model.get_data('exchange_rate', base_currency, target_currency)
+                if data:
+                    data = data[0]
+                    converted_amount = amount * data['rate']
+                else:
+                    invert_data, error = self.model.get_data('exchange_rate', target_currency, base_currency)
+                    if invert_data:
+                        data = invert_data[0]
+                        converted_amount = amount / invert_data['rate']
+                    else:
+                        bc_data, error = self.model.get_data('exchange_rate', 'USD', base_currency)
+                        print(bc_data)
+                        tc_data = self.model.get_data('exchange_rate', 'USD', target_currency)
+                        if bc_data and tc_data:
+                            data = bc_data[0]
+                            converted_amount = amount * bc_data[0]['rate'] / tc_data[0]['rate']
+                data['amount'] = amount
+                data['convertedAmount'] = converted_amount
+                if data:
+                    http_code, message = 200, data
+                elif error:
+                    http_code, message = 500, {'message': error}
+                else:
+                    http_code, message = 404, {'message': "The exchange rate for the pair was not found"}
+
+        self.do_response(http_code, message)
 
     def do_POST(self):
-        http_code, message, data = None, None, None
-        # self.path: /currencies?id=0&name=Euro&code=EUR&sign=%E2%82%AC
-        parsed_url = urlparse(self.path)
-        # ParseResult(scheme='', netloc='', path='/currencies', params='', query='name=Euro&code=EUR&sign=%E2%82%AC', fragment='')
-        query_parameters = parse_qs(parsed_url.query)
-        # {'name': ['Euro'], 'code': ['EUR'], 'sign': ['€']}
+        http_code, data, error = None, None, None
+        query = self.get_query()
 
         if self.path.startswith('/currencies'):
-            code = query_parameters['code']
-            fullname = query_parameters['name']
-            sign = query_parameters['sign']
+            code = query['code']
+            fullname = query['name']
+            sign = query['sign']
             if code and fullname and sign:
                 code = code[0]
                 fullname = fullname[0]
@@ -77,59 +107,63 @@ class RequestHandler(BaseHTTPRequestHandler):
 
 
         elif self.path.startswith('/exchangeRates'):
-            base_currency_code = query_parameters['baseCurrencyCode']
-            target_currency_code = query_parameters['targetCurrencyCode']
-            rate = query_parameters['rate']
+            base_currency_code = query['baseCurrencyCode']
+            target_currency_code = query['targetCurrencyCode']
+            rate = query['rate']
             if base_currency_code and target_currency_code and rate:
                 base_currency_code = base_currency_code[0]
                 target_currency_code = target_currency_code[0]
                 rate = rate[0]
                 data, error = self.model.post_data('exchange_rates', base_currency_code, target_currency_code, rate)
             else:
-                data, error = None, "The required form field is missing"
+                data, error = None, {'message': "The required form field is missing"}
 
         if error and 'already exists' in error:
-            http_code, message, data = 409, 'Conflict', data
+            http_code, message = 409, data
         elif error == "The required form field is missing":
-            http_code, message, data = 400, 'Bad Request', error
+            http_code, message = 400, {'message': error}
         elif data:
-            http_code, message, data = 200, "OK", data[0]
+            http_code, message = 200, data[0]
         else:
-            http_code, message, data = 500, 'Internal Server Error', error
+            http_code, message = 500, {'message': error}
 
-        self.do_response(http_code, message, data)
+        self.do_response(http_code, message)
 
     def do_PATCH(self):
-        if self.path.startswith('/exchangeRate/'):
-            query = str(self.path.split('/')[-1])
-            currencies = query.split('?')[0]
-            base_currency = query[0:3]
-            target_currency = query[3:6]
-            rate = query.split('=')[-1]
+        query = self.get_query()
 
-            if (len(query) < 7 or len(currencies) < 6 or
-                    not base_currency \
-                    or not target_currency\
+        if self.path.startswith('/exchangeRate/'):
+            currencies = str(self.path.split('/')[-1])
+            base_currency = currencies[0:3]
+            target_currency = currencies[3:6]
+            rate = query['rate']
+
+            if (len(currencies) < 7
+                    or not base_currency \
+                    or not target_currency \
                     or not rate):
-                http_code, message, data = 400, "Bad Request", "The currency code or rate are missing in the address"
+                http_code, message = 400, {'message': "The currency code or rate are missing in the address"}
 
             else:
-                data, error = self.model.patch_rate(base_currency, target_currency, rate)
+                data, error = self.model.patch_rate(base_currency, target_currency, rate[0])
                 if error == "The currency pair is missing in the database":
-                    http_code, message, data = 404, "Not Found", error
+                    http_code, message = 404, {'message': error}
                 elif data:
-                    http_code, message, data = 200, "OK", data[0]
+                    http_code, message = 200, data[0]
                 else:
-                    http_code, message, data = 500, 'Internal Server Error', error
+                    http_code, message = 500, {'message': error}
 
+            self.do_response(http_code, message)
 
-            self.do_response(http_code, message, data)
-
-    def do_response(self, code, message, data):
+    def do_response(self, code, message):
         # Sent response's header
-        self.send_response(code, message)
-        self.send_header("Content-type", 'text/html')
+        self.send_response(code)
+        self.send_header("Content-type", 'text/json')
         self.end_headers()
         # Sent response's body
-        response_content = json.dumps(data)
+        response_content = json.dumps(message)
         self.wfile.write(response_content.encode())
+
+    def get_query(self):
+        parsed_url = urlparse(self.path)
+        return parse_qs(parsed_url.query)

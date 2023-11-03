@@ -1,8 +1,6 @@
 import json
 import sqlite3
 
-from setuptools import logging
-
 
 class DbModel:
     def __init__(self):
@@ -11,21 +9,21 @@ class DbModel:
         self.get_querries = {'currencies': "SELECT id, fullname as name, code, sign from currencies",
 
                              'currency': """SELECT id, fullname as name, code, sign
-                                            from currencies where code = ?""",
+                                                from currencies where code = ?""",
 
                              'exchange_rates': """select er.id, 
-                                                    bc.id as 'baseCurrency.id', 
-                                                    bc.fullname as 'baseCurrency.name', 
-                                                    bc.code as 'baseCurrency.code', 
-                                                    bc.sign as 'baseCurrency.sign',
-                                                    tc.id as 'targetCurrency.id', 
-                                                    tc.fullname as 'targetCurrency.name', 
-                                                    tc.code as 'targetCurrency.code', 
-                                                    tc.sign as 'targetCurrency.sign',
-                                                    er.rate as 'rate'
-                                                    from exchange_rates er
-                                                    join currencies bc on er.base_currency_id = bc.id
-                                                    join currencies tc on er.target_currency_id = tc.id""",
+                                                bc.id as 'baseCurrency.id', 
+                                                bc.fullname as 'baseCurrency.name', 
+                                                bc.code as 'baseCurrency.code', 
+                                                bc.sign as 'baseCurrency.sign',
+                                                tc.id as 'targetCurrency.id', 
+                                                tc.fullname as 'targetCurrency.name', 
+                                                tc.code as 'targetCurrency.code', 
+                                                tc.sign as 'targetCurrency.sign',
+                                                er.rate as 'rate'
+                                                from exchange_rates er
+                                                join currencies bc on er.base_currency_id = bc.id
+                                                join currencies tc on er.target_currency_id = tc.id""",
 
                              'exchange_rate': """select er.id, 
                                                 bc.id as 'baseCurrency.id', 
@@ -41,16 +39,6 @@ class DbModel:
                                                 join currencies bc on er.base_currency_id = bc.id
                                                 join currencies tc on er.target_currency_id = tc.id
                                                 WHERE bc.code = ? and tc.code = ?"""}
-
-        self.post_querries = {'currencies': 'INSERT INTO currencies (code, fullname, sign) '
-                                            'VALUES (?, ?, ?)',
-                              'exchange_rates': """INSERT INTO exchange_rates 
-                                                (base_currency_id, target_currency_id, rate) 
-                                                VALUES (
-                                                    (SELECT id from currencies WHERE code = ?), 
-                                                    (SELECT id from currencies WHERE code = ?), 
-                                                    ?)"""}
-
 
     def get_data(self, table_query, param1=None, param2=None):
         error = None
@@ -116,7 +104,7 @@ class DbModel:
                         (SELECT id from currencies WHERE code = ?), 
                         (SELECT id from currencies WHERE code = ?), 
                         ?)""",
-                    (base_currency_code, target_currency_code, rate))
+                                     (base_currency_code, target_currency_code, rate))
                     self.con.commit()
                     return self.get_data('exchange_rate', base_currency_code, target_currency_code), None
             except Exception as e:
@@ -135,7 +123,7 @@ class DbModel:
                 self.cur.execute("""UPDATE exchange_rates SET rate = ?
                                 WHERE (base_currency_id  = (SELECT id from currencies WHERE code = ?) 
                                       and target_currency_id = (SELECT id from currencies WHERE code = ?))""",
-                                (rate, base_currency, target_currency))
+                                 (rate, base_currency, target_currency))
                 self.con.commit()
             return self.get_data('exchange_rate', base_currency, target_currency), None
         except Exception as e:
