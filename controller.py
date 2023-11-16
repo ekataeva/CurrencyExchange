@@ -34,7 +34,7 @@ class RequestHandler(BaseHTTPRequestHandler):
         elif self.path == '/exchangeRates':
             data, error = self.model.get_data('exchange_rates')
             if data:
-                http_code = 200
+                http_code, message = 200, data
             else:
                 http_code, message = 500, {'message': error}
 
@@ -70,14 +70,17 @@ class RequestHandler(BaseHTTPRequestHandler):
                     invert_data, error = self.model.get_data('exchange_rate', target_currency, base_currency)
                     if invert_data:
                         data = invert_data[0]
-                        converted_amount = amount / invert_data['rate']
+                        converted_amount = round(amount / data['rate'], 2)
                     else:
                         bc_data, error = self.model.get_data('exchange_rate', 'USD', base_currency)
                         print(bc_data)
-                        tc_data = self.model.get_data('exchange_rate', 'USD', target_currency)
+                        tc_data, error = self.model.get_data('exchange_rate', 'USD', target_currency)
                         if bc_data and tc_data:
-                            data = bc_data[0]
-                            converted_amount = amount * bc_data[0]['rate'] / tc_data[0]['rate']
+                            data = tc_data[0]
+                            data['rate'] = round(bc_data[0]['rate'] / tc_data[0]['rate'], 2)
+                            converted_amount = round(amount * data['rate'], 2)
+                            data['baseCurrency'] = bc_data[0]['targetCurrency']
+
                 data['amount'] = amount
                 data['convertedAmount'] = converted_amount
                 if data:
