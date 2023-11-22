@@ -1,5 +1,5 @@
 from http.server import HTTPServer
-from controller import RequestHandler
+from request_handler import RequestHandler
 port = 8000
 
 # Create HTTP-server with specified address and handler

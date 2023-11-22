@@ -1,4 +1,3 @@
-import json
 import sqlite3
 
 
@@ -70,26 +69,26 @@ class DbModel:
                     item[column_name] = value
             results.append(item)
 
-        self.con.commit()
         return results, error
 
     def post_data(self, table_query, param1, param2, param3):
 
-        if (table_query == 'currencies'):
+        if table_query == 'currencies':
             code = param1
             fullname = param2
             sign = param3
             try:
+                self.cur.execute("PRAGMA FOREIGN_KEYS = ON")
                 self.cur.execute('INSERT INTO currencies (code, fullname, sign) VALUES (?, ?, ?)',
                                  (code, fullname, sign))
                 self.con.commit()
                 return self.get_data('currency', code), None
-            except sqlite3.IntegrityError as e:
+            except sqlite3.IntegrityError:
                 return self.get_data('currency', code)[0], 'A currency with this code already exists'
-            except Exception as e:
-                return None, 'Server error'
+            except Exception as error:
+                return None, error
 
-        elif (table_query == 'exchange_rates'):
+        elif table_query == 'exchange_rates':
             base_currency_code = param1
             target_currency_code = param2
             rate = param3
@@ -98,18 +97,19 @@ class DbModel:
                 if data:
                     return data[0], 'An exchange rate with this codes already exists'
                 else:
+                    self.cur.execute("PRAGMA FOREIGN_KEYS = ON")
                     self.cur.execute("""INSERT INTO exchange_rates 
-                    (base_currency_id, target_currency_id, rate) 
-                    VALUES (
-                        (SELECT id from currencies WHERE code = ?), 
-                        (SELECT id from currencies WHERE code = ?), 
-                        ?)""",
-                                     (base_currency_code, target_currency_code, rate))
+                                        (base_currency_id, target_currency_id, rate) 
+                                        VALUES (
+                                            (SELECT id from currencies WHERE code = ?), 
+                                            (SELECT id from currencies WHERE code = ?), 
+                                            ?)""",
+                                        (base_currency_code, target_currency_code, rate))
                     self.con.commit()
                     return self.get_data('exchange_rate', base_currency_code, target_currency_code), None
-            except Exception as e:
-                print("Произошла другая ошибка:", str(e))
-                return None, 'Server error'
+            except Exception as error:
+                print("Произошла ошибка:", str(error))
+                return None, error
 
         else:
             return None, "The required form field is missing"
@@ -119,13 +119,13 @@ class DbModel:
             data = self.get_data('exchange_rate', base_currency, target_currency)
             if not data:
                 return None, "The currency pair is missing in the database"
-            else:
-                self.cur.execute("""UPDATE exchange_rates SET rate = ?
-                                WHERE (base_currency_id  = (SELECT id from currencies WHERE code = ?) 
-                                      and target_currency_id = (SELECT id from currencies WHERE code = ?))""",
-                                 (rate, base_currency, target_currency))
-                self.con.commit()
+
+            self.cur.execute("""UPDATE exchange_rates SET rate = ?
+                            WHERE (base_currency_id  = (SELECT id from currencies WHERE code = ?) 
+                                  and target_currency_id = (SELECT id from currencies WHERE code = ?))""",
+                             (rate, base_currency, target_currency))
+            self.con.commit()
             return self.get_data('exchange_rate', base_currency, target_currency), None
-        except Exception as e:
-            print("Произошла другая ошибка:", str(e))
-            return None, 'Server error'
+        except Exception as error:
+            print("Произошла ошибка:", str(error))
+            return None, error
