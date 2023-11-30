@@ -1,27 +1,30 @@
-from model import DbModel
+from dao import Dao
+
+
+missing_field_error = "The required form field is missing"
 
 
 class Controller:
     def __init__(self):
-        self.model = DbModel()
+        self.dao = Dao()
 
     def get_currencies(self):
-        data, error = self.model.get_data('currencies')
-        if data:
-            return 200, data
+        self.dao.get_data('currencies')
+        if self.dao.model.data:
+            return 200, self.dao.model.data
         else:
-            return 500, {'message': error}
+            return 500, {'message': self.dao.model.error}
 
     def get_currency(self, path):
         cur_code = str(path.split('/')[-1])
         if not cur_code:
             return 400, {'message': "The currency code is missing in the address"}
         else:
-            data, error = self.model.get_data('currency', cur_code)
-            if error:
-                return 500, {'message': error}
-            elif data:
-                return 200, data[0]
+            self.dao.get_data('currency', cur_code)
+            if self.dao.model.error:
+                return 500, {'message': self.dao.model.error}
+            elif self.dao.model.data:
+                return 200, self.dao.model.data[0]
             else:
                 return 404, {'message': "Currency not found"}
 
@@ -33,17 +36,19 @@ class Controller:
             code = code[0]
             fullname = fullname[0]
             sign = sign[0]
-            data, error = self.model.post_data('currencies', code, fullname, sign)
+            self.dao.post_data('currencies', code, fullname, sign)
         else:
-            data, error = None, "The required form field is missing"
-        return self.post_answer(data, error)
+            self.dao.model.data = None
+            self.dao.model.error = missing_field_error
+
+        return self.post_answer()
 
     def get_exchange_rates(self):
-        data, error = self.model.get_data('exchange_rates')
-        if data:
-            return 200, data
+        self.dao.get_data('exchange_rates')
+        if self.dao.model.data:
+            return 200, self.dao.model.data
         else:
-            return 500, {'message': error}
+            return 500, {'message': self.dao.model.error}
 
     def get_exchange_rate(self, path):
         currencies = str(path.split('/')[-1])
@@ -52,11 +57,11 @@ class Controller:
         if not base_currency or not target_currency:
             return 400, {'message': "Currency codes pair are missing in the address"}
         else:
-            data, error = self.model.get_data('exchange_rate', base_currency, target_currency)
-            if data:
-                return 200, data[0]
-            elif error:
-                return 500, {'message': error}
+            self.dao.get_data('exchange_rate', base_currency, target_currency)
+            if self.dao.model.data:
+                return 200, self.dao.model.data[0]
+            elif self.dao.model.error:
+                return 500, {'message': self.dao.model.error}
             else:
                 return 404, {'message': "The exchange rate for the pair was not found"}
 
@@ -67,31 +72,33 @@ class Controller:
             base_currency = query['from'][0]
             target_currency = query['to'][0]
             amount = float(query['amount'][0])
-            data, error = self.model.get_data('exchange_rate', base_currency, target_currency)
-            if data:
-                data = data[0]
-                converted_amount = amount * data['rate']
+            converted_amount = None
+            self.dao.get_data('exchange_rate', base_currency, target_currency)
+            if self.dao.model.data:
+                self.dao.model.data = self.dao.model.data[0]
+                converted_amount = amount * self.dao.model.data['rate']
             else:
-                invert_data, error = self.model.get_data('exchange_rate', target_currency, base_currency)
-                if invert_data:
-                    data = invert_data[0]
-                    converted_amount = round(amount / data['rate'], 2)
+                self.dao.get_data('exchange_rate', target_currency, base_currency)
+                if self.dao.model.data:
+                    self.dao.model.data = self.dao.model.data[0]
+                    converted_amount = round(amount / self.dao.model.data['rate'], 2)
                 else:
-                    bc_data, error = self.model.get_data('exchange_rate', 'USD', base_currency)
-                    print(bc_data)
-                    tc_data, error = self.model.get_data('exchange_rate', 'USD', target_currency)
-                    if bc_data and tc_data:
-                        data = tc_data[0]
-                        data['rate'] = round(bc_data[0]['rate'] / tc_data[0]['rate'], 2)
-                        converted_amount = round(amount * data['rate'], 2)
-                        data['baseCurrency'] = bc_data[0]['targetCurrency']
+                    self.dao.get_data('exchange_rate', 'USD', base_currency)
+                    bc_data = self.dao.model.data
+                    self.dao.get_data('exchange_rate', 'USD', target_currency)
 
-            data['amount'] = amount
-            data['convertedAmount'] = converted_amount
-            if data:
-                return 200, data
-            elif error:
-                return 500, {'message': error}
+                    if bc_data and self.dao.model.data:
+                        self.dao.model.data = self.dao.model.data[0]
+                        self.dao.model.data['rate'] = round(bc_data[0]['rate'] / self.dao.model.data['rate'], 2)
+                        converted_amount = round(amount * self.dao.model.data['rate'], 2)
+                        self.dao.model.data['baseCurrency'] = bc_data[0]['targetCurrency']
+
+            self.dao.model.data['amount'] = amount
+            self.dao.model.data['convertedAmount'] = converted_amount
+            if self.dao.model.data:
+                return 200, self.dao.model.data
+            elif self.dao.model.error:
+                return 500, {'message': self.dao.model.error}
             else:
                 return 404, {'message': "The exchange rate for the pair was not found"}
 
@@ -103,11 +110,12 @@ class Controller:
             base_currency_code = base_currency_code[0]
             target_currency_code = target_currency_code[0]
             rate = rate[0]
-            data, error = self.model.post_data('exchange_rates', base_currency_code, target_currency_code, rate)
+            self.dao.post_data('exchange_rates', base_currency_code, target_currency_code, rate)
         else:
-            data, error = None, {'message': "The required form field is missing"}
+            self.dao.model.data = None
+            self.dao.model.error = {'message': missing_field_error}
 
-        return self.post_answer(data, error)
+        return self.post_answer()
 
     def patch_exchange_rate(self, path, query):
 
@@ -121,21 +129,20 @@ class Controller:
             return 400, {'message': "The currency code or rate are missing in the address"}
 
         else:
-            data, error = self.model.patch_rate(base_currency, target_currency, rate[0])
-            if error == "The currency pair is missing in the database":
-                return 404, {'message': error}
-            elif data:
-                return 200, data[0]
+            self.dao.patch_rate(base_currency, target_currency, rate[0])
+            if self.dao.model.error == "The currency pair is missing in the database":
+                return 404, {'message': self.dao.model.error}
+            elif self.dao.model.data:
+                return 200, self.dao.model.data[0]
             else:
-                return 500, {'message': error}
+                return 500, {'message': self.dao.model.error}
 
-    @staticmethod
-    def post_answer(data, error):
-        if error and 'already exists' in error:
-            return 409, data
-        elif error == "The required form field is missing":
-            return 400, {'message': error}
-        elif data:
-            return 200, data[0]
+    def post_answer(self):
+        if self.dao.model.error and 'already exists' in self.dao.model.error:
+            return 409, self.dao.model.data
+        elif self.dao.model.error == missing_field_error:
+            return 400, {'message': self.dao.model.error}
+        elif self.dao.model.data:
+            return 200, self.dao.model.data[0]
         else:
-            return 500, {'message': error}
+            return 500, {'message': self.dao.model.error}
